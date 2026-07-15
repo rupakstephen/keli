@@ -70,12 +70,15 @@ The implementation plan for `keli` (stack, data model, ranking algorithm, recipe
 ## Flow 1 — Adding and ranking an entry
 This is the core mechanic end-to-end:
 
-1. **Browser** → user taps "Add" on `entries/new`, fills in title/domain/subcategory/notes, submits.
-2. **Server Component/Action** creates the `Entry` row with a placeholder `rankPosition`, then calls `lib/ranking.ts` to find where it belongs.
+1. **Browser** → user taps "Add" on `entries/new`, fills in title/domain/subcategory/notes, optionally attaches a photo, submits.
+   - **Photo attachment happens inline here, not as a separate step:** as soon as a photo is picked, the client uploads it straight to Vercel Blob in the background (same signed-token pattern as Flow 3) and holds the returned URL in form state — this can happen before the entry itself is ever saved, since Blob uploads don't require an `entryId`.
+2. **Server Component/Action** creates the `Entry` row with a placeholder `rankPosition`, then — in the same action, using the Blob URL(s) already sitting in form state — creates any `Photo` row(s) linked to the new `entryId`. Only after that does it call `lib/ranking.ts` to find where the entry belongs.
 3. **`lib/ranking.ts`** loads the subcategory's existing entries (sorted by `rankPosition`) from Postgres via Prisma, and instead of guessing, redirects the user into the duel flow.
 4. **Browser** → `compare/[entryId]` page renders one duel at a time: "which was better, X or Y?" — this is the binary-search step from the approved plan, so it takes `~log2(n)` screens, not one per existing item.
 5. Each tap posts the answer → a Server Action writes a `Comparison` row and narrows the search range (`lo`/`hi`) → either shows the next duel or, once resolved, computes the final `rankPosition` (midpoint of the two neighbors it landed between) and updates the `Entry`.
-6. **Browser** → redirected to `rank/[subcategoryId]`, which is a Server Component doing `ORDER BY rankPosition` and rendering positions 1..n — the raw `rankPosition` float never leaves the server; the page computes and sends only the display rank.
+6. **Browser** → redirected to `rank/[subcategoryId]`, which is a Server Component doing `ORDER BY rankPosition` and rendering positions 1..n — the raw `rankPosition` float never leaves the server; the page computes and sends only the display rank. The entry's photo(s), if any, show on its card here and on its detail page.
+
+Net effect: attaching a photo feels like one step to the user (fill form, pick a photo, save), even though it's really "upload bytes to Blob" + "create Entry" + "create Photo" happening in that order before the duel screens ever appear.
 
 ## Flow 2 — Importing a recipe from a URL
 1. **Browser** → user pastes a URL on `recipes/new`, submits to `POST /api/recipes/import`.
@@ -85,6 +88,7 @@ This is the core mechanic end-to-end:
 5. On failure, the browser drops into the manual recipe form instead — no dead end.
 
 ## Flow 3 — Photo upload
+The same upload mechanism used inline during entry creation (Flow 1, step 1) also works standalone — e.g. adding a photo to an entry or accomplishment after the fact:
 1. **Browser** → on an entry or accomplishment form, user picks/takes a photo; the client requests a short-lived signed upload token from `POST /api/photos/upload`.
 2. **Route Handler** verifies the session (via the same middleware-protected auth) and returns a signed Vercel Blob upload token — it does not touch the image bytes itself.
 3. **Browser** uploads the file directly to **Vercel Blob** using that token (`@vercel/blob/client`) — large binary transfer never passes through a Next.js serverless function, avoiding payload-size limits.

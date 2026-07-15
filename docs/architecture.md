@@ -32,8 +32,9 @@ The implementation plan for `keli` (stack, data model, ranking algorithm, recipe
                                         ▼
                          ┌─────────────────────────────┐
                          │   Neon (serverless Postgres)  │
-                         │   User / Subcategory / Entry /│
-                         │   Comparison / Recipe tables   │
+                         │   User / Subcategory / Entry / │
+                         │   Comparison / Recipe / Photo / │
+                         │   Accomplishment tables          │
                          └─────────────────────────────┘
 
                          ┌─────────────────────────────┐
@@ -48,6 +49,20 @@ The implementation plan for `keli` (stack, data model, ranking algorithm, recipe
                          (Vercel route handler reaches out here,
                           not the client — avoids CORS + hides
                           scraping logic from the browser)
+
+                         ┌─────────────────────────────┐
+                         │        Vercel Blob            │
+                         │  photo storage, keyed by URL   │
+                         │  referenced from Photo rows     │
+                         └───────────────▲─────────────┘
+                                         │ direct upload
+                                         │ (signed token issued by
+                                         │  /api/photos/upload, then
+                                         │  browser uploads bytes
+                                         │  straight to Blob)
+                         ┌───────────────┴───────────────┐
+                         │   Browser (phone/desktop)      │
+                         └─────────────────────────────┘
 ```
 
 **Why this shape:** Server Components let pages query Postgres directly during render (no separate "API layer" needed for normal reads — less code, faster pages). Route Handlers exist only where something can't be a plain page render: the recipe-import fetch (needs to happen server-side, not in the browser) and the NextAuth callback. Middleware is the single choke point for "are you logged in" — every route except `/login` passes through it.
@@ -69,7 +84,14 @@ This is the core mechanic end-to-end:
 4. On success, the Route Handler writes a `Recipe` row (including the raw JSON-LD for future reprocessing) and returns it to the browser, which shows the pre-filled recipe for a final look/edit before saving.
 5. On failure, the browser drops into the manual recipe form instead — no dead end.
 
-## Flow 3 — Auth
+## Flow 3 — Photo upload
+1. **Browser** → on an entry or accomplishment form, user picks/takes a photo; the client requests a short-lived signed upload token from `POST /api/photos/upload`.
+2. **Route Handler** verifies the session (via the same middleware-protected auth) and returns a signed Vercel Blob upload token — it does not touch the image bytes itself.
+3. **Browser** uploads the file directly to **Vercel Blob** using that token (`@vercel/blob/client`) — large binary transfer never passes through a Next.js serverless function, avoiding payload-size limits.
+4. On success, Blob returns a public URL; the **browser** sends that URL back to a Server Action, which writes a `Photo` row linking it to the current `entryId` or `accomplishmentId`.
+5. Pages showing that entry/accomplishment (Server Components) just `include` its `Photo` rows in the Prisma query and render the URLs — no extra round trip needed.
+
+## Flow 4 — Auth
 1. **Browser** → `login` page posts email + password to NextAuth's Credentials provider (via `/api/auth/[...nextauth]`).
 2. **Server** looks up the `User` row, runs `bcrypt.compare` against `passwordHash`.
 3. On success, NextAuth issues a signed **httpOnly** session cookie (JWT strategy — no session table). On failure, the form re-shows an error.
@@ -82,13 +104,14 @@ This is the core mechanic end-to-end:
 - **Database:** Neon Postgres, a separate managed service Vercel's functions connect to over a pooled connection string (stored as a Vercel environment variable) — not something Vercel hosts itself.
 - **Environments:** a single production environment is enough at 2-user scale (no need for staging); Vercel's preview deployments (one per PR/branch push) double as a free testing environment if changes ever need a dry run before hitting `main`.
 
-## Critical files (unchanged from the approved plan)
+## Critical files
 - `prisma/schema.prisma`
 - `src/lib/ranking.ts`
 - `src/app/compare/[entryId]/page.tsx`
 - `src/lib/recipeParser.ts`
 - `src/lib/auth.ts`
-- `src/middleware.ts` *(new — the auth gate described above; not called out explicitly in the original plan's file list)*
+- `src/middleware.ts` *(the auth gate described above; not called out explicitly in the original plan's file list)*
+- `src/app/api/photos/upload/route.ts` *(issues signed Vercel Blob upload tokens — see Flow 3)*
 
 ## Verification
-No new verification steps beyond what's already in the approved plan (`my-partner-wants-to-reflective-mountain.md`, section 7) — this document only clarifies the architecture, it doesn't change what needs to be tested.
+See `implementation-plan.md`'s verification section (steps 12-13 cover photos and accomplishments specifically) — this document only clarifies the architecture, it doesn't change what needs to be tested.

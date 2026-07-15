@@ -10,10 +10,14 @@ Three decisions were confirmed directly with you:
 - **Stack confirmed as-is** — Next.js + Postgres (Neon) + Prisma + NextAuth + Tailwind, deployed on Vercel as an installable, mobile-friendly responsive web app (not native).
 - **Domains are a fixed set for now** — Meals, Movies, Games, Travel, hardcoded as an enum. Adding a 5th later is a small change, not worth building a domain-management UI yet.
 
-## Tech stack
-**Next.js (App Router, TypeScript) + Prisma + Postgres via Neon + NextAuth.js (Credentials provider) + Tailwind CSS, deployed on Vercel.**
+Two follow-up decisions, confirmed after the architecture sketch:
+- **Accomplishments are both manual and auto-computed** — a freeform, cross-domain list you write your own entries into (title/date/write-up), *plus* live-computed stats (counts, firsts) pulled from your existing entries — not filed under any one domain.
+- **Photos are generic, not meal-only** — any entry (meal, movie, game, or travel) and any accomplishment can have photos attached, built once as a shared feature rather than meal-specific.
 
-Why: two people on different phones need one real shared backend (not local/browser storage like fridge-app used). Recipe-URL import needs a server-side fetch (CORS, no client-exposed scraping) — Next.js route handlers cover that without a separate backend service. Neon is zero-ops serverless Postgres with a free tier; Prisma gives schema + migrations + a typed client with minimal setup. Tailwind + a PWA manifest gives an installable, mobile-first experience without the ~2x build cost of a native app.
+## Tech stack
+**Next.js (App Router, TypeScript) + Prisma + Postgres via Neon + NextAuth.js (Credentials provider) + Tailwind CSS + Vercel Blob (photo storage), deployed on Vercel.**
+
+Why: two people on different phones need one real shared backend (not local/browser storage like fridge-app used). Recipe-URL import needs a server-side fetch (CORS, no client-exposed scraping) — Next.js route handlers cover that without a separate backend service. Neon is zero-ops serverless Postgres with a free tier; Prisma gives schema + migrations + a typed client with minimal setup. Tailwind + a PWA manifest gives an installable, mobile-first experience without the ~2x build cost of a native app. Vercel Blob is the natural choice for photo storage since it's already part of the Vercel account being used for hosting — no separate provider/API keys to manage — and its free tier (1GB storage, 10GB bandwidth/month) is well beyond what two people's meal/travel photos will need.
 
 ## Data model
 Core entities (Prisma schema, `prisma/schema.prisma`):
@@ -24,8 +28,13 @@ Core entities (Prisma schema, `prisma/schema.prisma`):
 - **`Entry`** — the core object: doubles as both journal entry and ranked item. Fields: `domain`, `subcategoryId`, `title`, `notes` (free text, independent of rank), `experiencedAt`, `rankPosition` (float, internal sort key — **never rendered to the UI as a number**, only as relative position in a list), `metadata` (JSON, domain-specific extras), optional `recipeId`, `createdById`.
 - **`Comparison`** — audit trail of each pairwise duel: `subcategoryId`, `winnerEntryId`, `loserEntryId`, `comparedById`, `comparedAt`. Not needed for sort correctness but supports "why is X above Y" and a future undo.
 - **`Recipe`** — `title`, `sourceUrl` (null if manually authored), `imageUrl`, `servings`, `prepTimeMin`, `cookTimeMin`, `ingredients` (JSON string array), `instructions` (JSON string array), `rawJsonLd` (original scraped block, kept for reprocessing if normalization logic changes).
+- **`Accomplishment`** — the freeform, cross-domain milestone list: `title`, `description` (the write-up), `achievedAt`, `createdById`, `createdAt`. Deliberately has no `domain`/`subcategoryId` — it's one shared list, not filed per-category.
+- **`Photo`** — `url` (Vercel Blob URL), `entryId` (nullable FK to `Entry`), `accomplishmentId` (nullable FK to `Accomplishment`), `uploadedById`, `createdAt`. Exactly one of `entryId`/`accomplishmentId` is set per row (enforced in application code, not a DB constraint — fine at this scale). One photo table shared by both parents rather than duplicating an `EntryPhoto`/`AccomplishmentPhoto` table, since the shape is identical.
 
 Enforce "never show the number" at the API layer: a `toPublicEntry()` mapper strips `rankPosition` from anything sent to the client, exposing only a computed 1-based `position` derived from list order.
+
+### Accomplishment stats (the "auto-computed" half)
+Rather than a separate stats table or background job (unnecessary at 2-user data volume), the accomplishments page runs a handful of live Prisma aggregate queries on render: total entries per domain (`count` grouped by `domain`), oldest/most-recent entry per domain (`firsts`), total comparisons made, total recipes cooked-from, total accomplishments logged. These render as a small stats strip above the manual accomplishments list. No "unlocked badge" state-tracking system for MVP — that would need its own table (`Badge`, `UnlockedBadge`) to remember what's already been shown/earned; flagged as a clean fast-follow (M6+) rather than built now, since live counters already satisfy "auto-computed" without that extra bookkeeping.
 
 ## Ranking algorithm (`src/lib/ranking.ts`)
 **Explicit ordered position via binary-search insertion — not Elo.** Elo is for large populations with recurring, probabilistic matchups; here every comparison is a one-time authoritative statement ("Shrek 2 > Shrek 1") that should never be silently re-weighted later. Binary insertion guarantees the list is always structurally consistent with every comparison made, and needs no tuning.
@@ -42,6 +51,9 @@ Enforce "never show the number" at the API layer: a `toPublicEntry()` mapper str
 3. Normalize into the `Recipe` schema, handling known shape variance: `image` (string / array / `ImageObject`), `prepTime`/`cookTime` (ISO 8601 durations like `PT20M`), `recipeInstructions` (string, string array, `HowToStep[]`, or nested `HowToSection[]`). Store `rawJsonLd` alongside for reprocessing.
 4. **Fallback** when no JSON-LD Recipe is found: try a basic microdata pass (`[itemtype*="schema.org/Recipe"]`), and if that also fails, return a clear "couldn't auto-import" response that drops the user into the manual recipe form, pre-filled with whatever generic metadata is available (page `<title>`, `og:image`).
 5. Not pulling in a third-party recipe-scraper npm package — the schema variance is small enough (~80-100 lines) to own directly rather than depend on an often-unmaintained package.
+
+## Photo uploads (`src/app/api/photos/upload/route.ts`)
+Uses Vercel Blob's client-upload pattern (`@vercel/blob/client`) rather than routing image bytes through a server function body: the browser requests a short-lived signed upload token from a small route handler, then uploads the file bytes directly to Blob storage, and only the resulting URL comes back to the app to save as a `Photo` row linked to the relevant `entryId` or `accomplishmentId`. This avoids Vercel serverless function payload-size limits and keeps large binary transfer off the app server entirely. Client-side, an `<input type="file" accept="image/*" capture>` on entry/accomplishment forms lets you pick from the camera roll or take a photo directly on mobile. No image resizing/compression pipeline for MVP — Blob just stores what's uploaded; revisit only if storage or load-time becomes a real problem at 2-user scale (unlikely).
 
 ## Auth
 Exactly 2 users sharing one dataset — deliberately minimal, and specifically avoiding fridge-app's mistakes (plaintext passwords, fake OAuth, client-only storage).
@@ -65,10 +77,14 @@ keli/
         compare/[entryId]/page.tsx        # pairwise duel screen
         subcategories/page.tsx            # create/manage subcategories per domain
         recipes/page.tsx, recipes/new/page.tsx, recipes/[id]/page.tsx
+        accomplishments/page.tsx          # stats strip + manual accomplishment list
+        accomplishments/new/page.tsx
       api/recipes/import/route.ts
+      api/photos/upload/route.ts          # issues signed Vercel Blob upload tokens
       api/auth/[...nextauth]/route.ts
     lib/db.ts, auth.ts, ranking.ts, recipeParser.ts
-    components/CompareDuel.tsx, RankedList.tsx, EntryCard.tsx, RecipeForm.tsx
+    components/CompareDuel.tsx, RankedList.tsx, EntryCard.tsx, RecipeForm.tsx,
+               PhotoUploader.tsx, AccomplishmentCard.tsx, StatsStrip.tsx
   public/manifest.json                    # PWA install support
 ```
 
@@ -78,7 +94,8 @@ keli/
 - **M2 — Ranking engine (core mechanic):** `lib/ranking.ts`, the duel UI, wire entry creation into binary-insertion, render `rank/[subcategoryId]` as a plain best-to-worst list.
 - **M3 — Polish:** entry detail/edit, manual re-rank, domain tabs, mobile bottom-nav, empty states. All 3 must-haves (ranking, private journal, scoped comparisons) complete after this milestone.
 - **M4 — Recipe box:** `Recipe` model + manual form first, then `api/recipes/import` (cheerio + JSON-LD + fallback), then optional `recipeId` link on Meal entries.
-- **M5 — Stretch (not required):** PWA install polish, photos, search/filter, rankPosition rebalancing job, tie support.
+- **M5 — Photos & accomplishments:** `Photo` model + Vercel Blob client-upload flow, wired into entry and accomplishment forms; `Accomplishment` model + manual create/list UI; live-computed stats strip.
+- **M6 — Stretch (not required):** PWA install polish, search/filter, rankPosition rebalancing job, tie support, badge/unlock-state system for accomplishments.
 
 ## Verification
 Run through this on two real devices logged in as the two seeded users, to confirm shared-backend behavior (not per-device local storage):
@@ -93,6 +110,8 @@ Run through this on two real devices logged in as the two seeded users, to confi
 9. Recipe ↔ entry link: attach a recipe to a Meal entry; confirm it also stands alone in the recipe box.
 10. Mobile usability: repeat steps 3-4 on an actual phone browser, confirm duel UI is comfortably tappable one-handed.
 11. Confirm both phones reach the real deployed Vercel URL, not just localhost.
+12. Photos: attach a photo to a meal entry from a phone camera roll, confirm it appears on the entry and persists after refresh; repeat for a non-meal entry (e.g. a movie) and for an accomplishment, confirming the generic upload works everywhere, not just meals.
+13. Accomplishments: create a manual accomplishment with a write-up and confirm it appears on the shared list for both users; confirm the stats strip reflects real counts (e.g. add a 3rd movie and confirm the movie count increments).
 
 ### Critical files
 - `prisma/schema.prisma`
@@ -100,3 +119,4 @@ Run through this on two real devices logged in as the two seeded users, to confi
 - `src/app/compare/[entryId]/page.tsx`
 - `src/lib/recipeParser.ts`
 - `src/lib/auth.ts`
+- `src/app/api/photos/upload/route.ts`

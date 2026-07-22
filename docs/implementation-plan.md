@@ -14,6 +14,8 @@ Two follow-up decisions, confirmed after the architecture sketch:
 - **Accomplishments are both manual and auto-computed** — a freeform, cross-domain list you write your own entries into (title/date/write-up), *plus* live-computed stats (counts, firsts) pulled from your existing entries — not filed under any one domain.
 - **Photos are generic, not meal-only** — any entry (meal, movie, game, or travel) and any accomplishment can have photos attached, built once as a shared feature rather than meal-specific.
 
+A third follow-up decision, after discussing self-hosting alternatives: **stay on Vercel + Neon + Vercel Blob for the live app** (self-hosting on home hardware was considered — Mac Mini, Pi5, Pi4B — but rejected for now: it trades zero-ops reliability for becoming your own sysadmin, and none of the idle hardware was fully ready to go). Instead, the "don't want our data locked behind a provider" concern is addressed with **automated backups to your own Nextcloud instance** (already running on your Pi5) rather than by self-hosting the database itself. See **Backups** below.
+
 ## Tech stack
 **Next.js (App Router, TypeScript) + Prisma + Postgres via Neon + NextAuth.js (Credentials provider) + Tailwind CSS + Vercel Blob (photo storage), deployed on Vercel.**
 
@@ -55,6 +57,17 @@ Rather than a separate stats table or background job (unnecessary at 2-user data
 ## Photo uploads (`src/app/api/photos/upload/route.ts`)
 Uses Vercel Blob's client-upload pattern (`@vercel/blob/client`) rather than routing image bytes through a server function body: the browser requests a short-lived signed upload token from a small route handler, then uploads the file bytes directly to Blob storage, and only the resulting URL comes back to the app to save as a `Photo` row linked to the relevant `entryId` or `accomplishmentId`. This avoids Vercel serverless function payload-size limits and keeps large binary transfer off the app server entirely. Client-side, an `<input type="file" accept="image/*" capture>` on entry/accomplishment forms lets you pick from the camera roll or take a photo directly on mobile. No image resizing/compression pipeline for MVP — Blob just stores what's uploaded; revisit only if storage or load-time becomes a real problem at 2-user scale (unlikely).
 
+## Backups (`scripts/backup.sh`)
+Vercel + Neon + Vercel Blob host the live app, but a scheduled job keeps an independent, restorable copy of everything on hardware you own — so the data is never actually trapped behind a provider, even though nothing self-hosted is on the app's critical path day-to-day.
+
+- **Where it runs:** a cron job on the **Pi5** (already always-on, already running Nextcloud). Chosen over a GitHub Actions scheduled job specifically so the job only ever makes *outbound* connections (to Neon, to the Vercel Blob API) — nothing about backups requires exposing Nextcloud or the home network to the internet.
+- **What it does, nightly:**
+  1. `pg_dump` against the Neon connection string (a read-only Postgres role, not the app's main credential), gzipped. Expected size: trivially small — low single-digit MB even after a couple years of heavy use, since the schema is almost entirely short text rows; the only moderately-sized rows are `Recipe.rawJsonLd`.
+  2. A Blob sync step: list objects via the Vercel Blob API, download any new/changed photos since the last run. This is the part that actually matters for size (phone photos run ~2-5MB each) and the part a `pg_dump` alone would silently miss, since photo bytes live in Blob, not Postgres — only the `Photo` table's *URLs* would be in the dump otherwise.
+  3. Both land in a folder inside the Pi5's Nextcloud data directory, so they show up as regular versioned files — no separate storage system to run.
+- **Why Nextcloud, not a raw folder on disk:** it's already running, already durable, and gives file versioning/sync for free — no reason to stand up a second thing to do a job Nextcloud already does.
+- Not built until after M0 (there's nothing to back up yet), and doesn't block any feature milestone — it's an operational task, not app code, so it can slot in whenever convenient once Neon/Blob exist.
+
 ## Auth
 Exactly 2 users sharing one dataset — deliberately minimal, and specifically avoiding fridge-app's mistakes (plaintext passwords, fake OAuth, client-only storage).
 - No public signup route. Both accounts created once via `prisma/seed.ts`, storing `passwordHash` with `bcryptjs` (10+ salt rounds).
@@ -95,7 +108,8 @@ keli/
 - **M3 — Polish:** entry detail/edit, manual re-rank, domain tabs, mobile bottom-nav, empty states. All 3 must-haves (ranking, private journal, scoped comparisons) complete after this milestone.
 - **M4 — Recipe box:** `Recipe` model + manual form first, then `api/recipes/import` (cheerio + JSON-LD + fallback), then optional `recipeId` link on Meal entries.
 - **M5 — Photos & accomplishments:** `Photo` model + Vercel Blob client-upload flow, wired into entry and accomplishment forms; `Accomplishment` model + manual create/list UI; live-computed stats strip.
-- **M6 — Stretch (not required):** PWA install polish, search/filter, rankPosition rebalancing job, tie support, badge/unlock-state system for accomplishments.
+- **M6 — Backups:** `scripts/backup.sh` (pg_dump + Blob sync), read-only Neon role for it to run as, cron entry on the Pi5, destination folder in Nextcloud. Confirm a restore actually works before considering it done.
+- **M7 — Stretch (not required):** PWA install polish, search/filter, rankPosition rebalancing job, tie support, badge/unlock-state system for accomplishments.
 
 ## Verification
 Run through this on two real devices logged in as the two seeded users, to confirm shared-backend behavior (not per-device local storage):
@@ -112,6 +126,7 @@ Run through this on two real devices logged in as the two seeded users, to confi
 11. Confirm both phones reach the real deployed Vercel URL, not just localhost.
 12. Photos: attach a photo to a meal entry from a phone camera roll, confirm it appears on the entry and persists after refresh; repeat for a non-meal entry (e.g. a movie) and for an accomplishment, confirming the generic upload works everywhere, not just meals.
 13. Accomplishments: create a manual accomplishment with a write-up and confirm it appears on the shared list for both users; confirm the stats strip reflects real counts (e.g. add a 3rd movie and confirm the movie count increments).
+14. Backup restore: run `scripts/backup.sh` manually, confirm both the gzipped dump and any new photos land in Nextcloud, then actually restore the dump into a scratch Postgres instance and diff a few rows against Neon — a backup that's never been restored isn't verified.
 
 ### Critical files
 - `prisma/schema.prisma`
@@ -120,3 +135,4 @@ Run through this on two real devices logged in as the two seeded users, to confi
 - `src/lib/recipeParser.ts`
 - `src/lib/auth.ts`
 - `src/app/api/photos/upload/route.ts`
+- `scripts/backup.sh`

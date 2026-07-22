@@ -63,6 +63,17 @@ The implementation plan for `keli` (stack, data model, ranking algorithm, recipe
                          ┌───────────────┴───────────────┐
                          │   Browser (phone/desktop)      │
                          └─────────────────────────────┘
+
+     (home network — not on the app's critical path, outbound-only)
+                         ┌─────────────────────────────┐
+                         │      Pi5 — cron, nightly      │
+                         │  scripts/backup.sh reaches OUT │
+                         │  to pull from Neon (pg_dump,   │
+                         │  read-only role) and the       │
+                         │  Vercel Blob API (photo sync), │
+                         │  writes both into Nextcloud     │
+                         │  (already running on this Pi5)  │
+                         └─────────────────────────────┘
 ```
 
 **Why this shape:** Server Components let pages query Postgres directly during render (no separate "API layer" needed for normal reads — less code, faster pages). Route Handlers exist only where something can't be a plain page render: the recipe-import fetch (needs to happen server-side, not in the browser) and the NextAuth callback. Middleware is the single choke point for "are you logged in" — every route except `/login` passes through it.
@@ -95,7 +106,15 @@ The same upload mechanism used inline during entry creation (Flow 1, step 1) als
 4. On success, Blob returns a public URL; the **browser** sends that URL back to a Server Action, which writes a `Photo` row linking it to the current `entryId` or `accomplishmentId`.
 5. Pages showing that entry/accomplishment (Server Components) just `include` its `Photo` rows in the Prisma query and render the URLs — no extra round trip needed.
 
-## Flow 4 — Auth
+## Flow 4 — Nightly backup
+Runs entirely outside the request path above — the app never knows it's happening:
+1. **Pi5 cron** kicks off `scripts/backup.sh` on a nightly schedule.
+2. The script `pg_dump`s Neon using a **read-only** Postgres role (not the app's main credential), gzips the result.
+3. It also calls the **Vercel Blob API** to list objects and download any photos that are new since the last run — this step exists because a Postgres dump alone only captures the `Photo` table's *URLs*, not the image bytes themselves, which live in Blob, not Postgres.
+4. Both the dump and any new photos are written into a folder inside the Pi5's existing **Nextcloud** data directory — no new storage system, just files Nextcloud already versions and syncs.
+5. Every connection here is **outbound from the Pi5** (to Neon, to the Vercel Blob API) — nothing about this flow requires opening the home network to inbound traffic, and nothing about the live app depends on the Pi5 being up.
+
+## Flow 5 — Auth
 1. **Browser** → `login` page posts email + password to NextAuth's Credentials provider (via `/api/auth/[...nextauth]`).
 2. **Server** looks up the `User` row, runs `bcrypt.compare` against `passwordHash`.
 3. On success, NextAuth issues a signed **httpOnly** session cookie (JWT strategy — no session table). On failure, the form re-shows an error.
@@ -107,6 +126,8 @@ The same upload mechanism used inline during entry creation (Flow 1, step 1) als
 - **CI/CD:** pushing to `main` triggers a Vercel build automatically (git integration, no separate pipeline to configure) — build runs `next build`, `prisma generate`, deploys serverless functions + static assets to Vercel's edge network.
 - **Database:** Neon Postgres, a separate managed service Vercel's functions connect to over a pooled connection string (stored as a Vercel environment variable) — not something Vercel hosts itself.
 - **Environments:** a single production environment is enough at 2-user scale (no need for staging); Vercel's preview deployments (one per PR/branch push) double as a free testing environment if changes ever need a dry run before hitting `main`.
+- **Self-hosting was considered and set aside:** Mac Mini, Pi5, and Pi4B were all evaluated as hosts for the app and/or Postgres. Rejected for now because it trades Vercel/Neon's zero-ops reliability for taking on sysadmin work (uptime, TLS, deploys, backups) — not worth it for a 2-person app that just needs to work. The actual underlying concern (not wanting data locked behind a provider) is instead addressed by the nightly backup below, which keeps a fully independent, restorable copy of everything on hardware you own.
+- **Backups:** nightly, from the Pi5, outbound-only — see Flow 4. Nothing about the live app depends on home hardware being up; the backup exists purely so the data is never *only* on Vercel/Neon.
 
 ## Critical files
 - `prisma/schema.prisma`
@@ -116,6 +137,7 @@ The same upload mechanism used inline during entry creation (Flow 1, step 1) als
 - `src/lib/auth.ts`
 - `src/middleware.ts` *(the auth gate described above; not called out explicitly in the original plan's file list)*
 - `src/app/api/photos/upload/route.ts` *(issues signed Vercel Blob upload tokens — see Flow 3)*
+- `scripts/backup.sh` *(nightly pg_dump + Blob photo sync to Nextcloud — see Flow 4)*
 
 ## Verification
-See `implementation-plan.md`'s verification section (steps 12-13 cover photos and accomplishments specifically) — this document only clarifies the architecture, it doesn't change what needs to be tested.
+See `implementation-plan.md`'s verification section (steps 12-13 cover photos and accomplishments; step 14 covers the backup restore test) — this document only clarifies the architecture, it doesn't change what needs to be tested.

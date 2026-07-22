@@ -23,7 +23,7 @@ The implementation plan for `keli` (stack, data model, ranking algorithm, recipe
                          │  │  - Route Handlers (API)    │  │
                          │  │    /api/recipes/import      │  │
                          │  │    /api/auth/[...nextauth] │  │
-                         │  │  - Middleware               │  │  (session gate:
+                         │  │  - Proxy (`src/proxy.ts`)   │  │  (session gate:
                          │  │    (auth check on every    │  │   redirect to /login
                          │  │     request except /login) │  │   if no valid cookie)
                          │  └───────────┬─────────────┘  │
@@ -76,7 +76,7 @@ The implementation plan for `keli` (stack, data model, ranking algorithm, recipe
                          └─────────────────────────────┘
 ```
 
-**Why this shape:** Server Components let pages query Postgres directly during render (no separate "API layer" needed for normal reads — less code, faster pages). Route Handlers exist only where something can't be a plain page render: the recipe-import fetch (needs to happen server-side, not in the browser) and the NextAuth callback. Middleware is the single choke point for "are you logged in" — every route except `/login` passes through it.
+**Why this shape:** Server Components let pages query Postgres directly during render (no separate "API layer" needed for normal reads — less code, faster pages). Route Handlers exist only where something can't be a plain page render: the recipe-import fetch (needs to happen server-side, not in the browser) and the NextAuth callback. The **proxy** (`src/proxy.ts` — Next.js 16 renamed the old `middleware.ts`/`middleware()` convention to `proxy.ts`/`proxy()`, same role) is the single choke point for "are you logged in" — every route except `/login` passes through it.
 
 ## Flow 1 — Adding and ranking an entry
 This is the core mechanic end-to-end:
@@ -118,7 +118,7 @@ Runs entirely outside the request path above — the app never knows it's happen
 1. **Browser** → `login` page posts email + password to NextAuth's Credentials provider (via `/api/auth/[...nextauth]`).
 2. **Server** looks up the `User` row, runs `bcrypt.compare` against `passwordHash`.
 3. On success, NextAuth issues a signed **httpOnly** session cookie (JWT strategy — no session table). On failure, the form re-shows an error.
-4. Every subsequent request carries that cookie; **Middleware** checks it before letting the request reach any page or route handler other than `/login` and the NextAuth handler itself, redirecting to `/login` if it's missing/invalid.
+4. Every subsequent request carries that cookie; the **proxy** (`src/proxy.ts`) checks it before letting the request reach any page or route handler other than `/login` and the NextAuth handler itself, redirecting to `/login` if it's missing/invalid.
 5. There's no separate per-user data partitioning — once authenticated, both accounts read/write the same shared tables (by design: one shared journal, not two silos).
 
 ## Deployment topology
@@ -145,7 +145,7 @@ Critically, the nightly backup (Flow 4) already mirrors the full database and ev
 - `src/app/compare/[entryId]/page.tsx`
 - `src/lib/recipeParser.ts`
 - `src/lib/auth.ts`
-- `src/middleware.ts` *(the auth gate described above; not called out explicitly in the original plan's file list)*
+- `src/proxy.ts` *(the auth gate described above — Next.js 16's renamed `middleware.ts`; not called out explicitly in the original plan's file list)*
 - `src/app/api/photos/upload/route.ts` *(issues signed Vercel Blob upload tokens — see Flow 3)*
 - `scripts/backup.sh` *(nightly pg_dump + Blob photo sync to Nextcloud — see Flow 4)*
 

@@ -73,7 +73,7 @@ Exactly 2 users sharing one dataset — deliberately minimal, and specifically a
 - No public signup route. Both accounts created once via `prisma/seed.ts`, storing `passwordHash` with `bcryptjs` (10+ salt rounds).
 - NextAuth.js Credentials provider: verifies `bcrypt.compare` against `passwordHash`, issues a signed httpOnly session cookie (JWT strategy — no sessions table needed at this scale).
 - No self-service password reset (no email infra) — an acceptable simplification for 2 known users; reset via the seed script if needed.
-- Every authenticated user can read/write the whole shared dataset (no per-row ownership) — auth just gates "logged in or not," via middleware redirecting unauthenticated requests to `/login`.
+- Every authenticated user can read/write the whole shared dataset (no per-row ownership) — auth just gates "logged in or not," via `src/proxy.ts` redirecting unauthenticated requests to `/login` (Next.js 16 renamed the old `middleware.ts` convention to `proxy.ts`; same role, checked against every request except `/login`).
 
 ## Project structure
 ```
@@ -95,6 +95,7 @@ keli/
       api/recipes/import/route.ts
       api/photos/upload/route.ts          # issues signed Vercel Blob upload tokens
       api/auth/[...nextauth]/route.ts
+    proxy.ts                                # auth gate (Next.js 16 renamed from middleware.ts)
     lib/db.ts, auth.ts, ranking.ts, recipeParser.ts
     components/CompareDuel.tsx, RankedList.tsx, EntryCard.tsx, RecipeForm.tsx,
                PhotoUploader.tsx, AccomplishmentCard.tsx, StatsStrip.tsx
@@ -134,5 +135,6 @@ Run through this on two real devices logged in as the two seeded users, to confi
 - `src/app/compare/[entryId]/page.tsx`
 - `src/lib/recipeParser.ts`
 - `src/lib/auth.ts`
+- `src/proxy.ts`
 - `src/app/api/photos/upload/route.ts`
 - `scripts/backup.sh`

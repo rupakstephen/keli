@@ -1,0 +1,19 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// M0 scope: just enough to prove auth + a shared backend work end to end.
+// Domain/Subcategory/Entry/Comparison/Recipe/Photo/Accomplishment land in
+// later milestones per docs/implementation-plan.md.
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  createdAt    DateTime @default(now())
+}

@@ -17,25 +17,35 @@ export async function createEntry(formData: FormData) {
 
   if (!domain || !subcategoryId || !title || !experiencedAt) return;
 
-  // M1 just appends to the end of the subcategory's list. The binary-search
-  // duel flow that actually places new entries by comparison is M2.
-  const last = await prisma.entry.findFirst({
+  // Placeholder position -- appended past the current worst entry. Correct
+  // if the subcategory was empty (nothing to duel against); otherwise this
+  // is overwritten once the duel flow below resolves where it really goes.
+  const worst = await prisma.entry.findFirst({
     where: { subcategoryId },
     orderBy: { rankPosition: "desc" },
   });
-  const rankPosition = (last?.rankPosition ?? 0) + 1000;
 
-  await prisma.entry.create({
+  const entry = await prisma.entry.create({
     data: {
       domain,
       subcategoryId,
       title,
       notes,
       experiencedAt: new Date(experiencedAt),
-      rankPosition,
+      rankPosition: (worst?.rankPosition ?? 0) + 1000,
       createdById: session.user.id,
     },
   });
 
-  redirect("/journal");
+  const existing = await prisma.entry.findMany({
+    where: { subcategoryId, id: { not: entry.id } },
+    orderBy: { rankPosition: "asc" },
+  });
+
+  if (existing.length === 0) {
+    // Nothing to compare against -- the placeholder above is already correct.
+    redirect(`/rank/${subcategoryId}`);
+  }
+
+  redirect(`/compare/${entry.id}?lo=0&hi=${existing.length}`);
 }

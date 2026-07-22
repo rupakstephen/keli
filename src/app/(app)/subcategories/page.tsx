@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { Domain } from "@/generated/prisma/client";
 import { createSubcategory } from "./actions";
@@ -44,7 +45,11 @@ export default async function SubcategoriesPage() {
             <h2 className="text-sm font-medium text-zinc-500">{domain}</h2>
             <ul className="list-disc pl-5">
               {inDomain.map((s) => (
-                <li key={s.id}>{s.label}</li>
+                <li key={s.id}>
+                  <Link href={`/rank/${s.id}`} className="underline">
+                    {s.label}
+                  </Link>
+                </li>
               ))}
             </ul>
           </div>

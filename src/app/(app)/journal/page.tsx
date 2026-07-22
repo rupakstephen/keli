@@ -43,7 +43,9 @@ export default async function JournalPage({
         {entries.map((entry) => (
           <li key={entry.id} className="rounded border p-3">
             <div className="flex justify-between text-sm text-zinc-500">
-              <span>{entry.subcategory.label}</span>
+              <Link href={`/rank/${entry.subcategoryId}`} className="underline">
+                {entry.subcategory.label}
+              </Link>
               <span>{entry.experiencedAt.toISOString().slice(0, 10)}</span>
             </div>
             <div className="font-medium">{entry.title}</div>

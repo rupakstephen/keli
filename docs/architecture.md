@@ -129,6 +129,16 @@ Runs entirely outside the request path above — the app never knows it's happen
 - **Self-hosting was considered and set aside:** Mac Mini, Pi5, and Pi4B were all evaluated as hosts for the app and/or Postgres. Rejected for now because it trades Vercel/Neon's zero-ops reliability for taking on sysadmin work (uptime, TLS, deploys, backups) — not worth it for a 2-person app that just needs to work. The actual underlying concern (not wanting data locked behind a provider) is instead addressed by the nightly backup below, which keeps a fully independent, restorable copy of everything on hardware you own.
 - **Backups:** nightly, from the Pi5, outbound-only — see Flow 4. Nothing about the live app depends on home hardware being up; the backup exists purely so the data is never *only* on Vercel/Neon.
 
+## Self-hosting exit path
+Nothing in this design locks the app to Vercel/Neon permanently — the two potentially vendor-specific pieces are isolated on purpose:
+- **Postgres:** Prisma speaks standard Postgres wire protocol against a `DATABASE_URL` — swapping Neon for a self-hosted instance (e.g. on the Pi5/Pi4B) is an env var change plus `pg_restore` from an existing dump, not an application rewrite.
+- **Photos:** confined to one route handler (`src/app/api/photos/upload/route.ts`) and one Prisma column (`Photo.url`); nothing else in the app cares what produced that URL.
+- **Everything else** — NextAuth, `lib/ranking.ts`, `lib/recipeParser.ts`, the pages themselves — has no cloud-specific dependency; `next start` runs anywhere Node runs.
+
+A full move off Vercel would mean: Next.js as a persistent process on a Pi (systemd/Docker) instead of serverless functions, fronted by the Pi5's existing **nginx** + **Cloudflare Tunnel** instead of Vercel's git-push auto-deploy, Postgres + **PgBouncer** on the Pi instead of Neon, and photos written to local disk instead of Blob.
+
+Critically, the nightly backup (Flow 4) already mirrors the full database and every photo into Nextcloud on an ongoing basis — so on the day this move actually happens, there's no scramble to export anything; it's "point the self-hosted stack at data you already have a verified restore of."
+
 ## Critical files
 - `prisma/schema.prisma`
 - `src/lib/ranking.ts`

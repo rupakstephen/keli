@@ -7,13 +7,73 @@ datasource db {
   provider = "postgresql"
 }
 
-// M0 scope: just enough to prove auth + a shared backend work end to end.
-// Domain/Subcategory/Entry/Comparison/Recipe/Photo/Accomplishment land in
-// later milestones per docs/implementation-plan.md.
+// M1 adds Subcategory/Entry/Comparison (journal skeleton, no ranking logic
+// wired up yet). Recipe/Photo/Accomplishment land in later milestones
+// per docs/implementation-plan.md.
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
   name         String
   passwordHash String
   createdAt    DateTime @default(now())
+
+  entries     Entry[]
+  comparisons Comparison[]
+}
+
+enum Domain {
+  MEAL
+  MOVIE
+  GAME
+  TRAVEL
+}
+
+model Subcategory {
+  id        String   @id @default(cuid())
+  domain    Domain
+  label     String
+  createdAt DateTime @default(now())
+
+  entries     Entry[]
+  comparisons Comparison[]
+
+  @@unique([domain, label])
+}
+
+model Entry {
+  id            String   @id @default(cuid())
+  domain        Domain
+  subcategoryId String
+  subcategory   Subcategory @relation(fields: [subcategoryId], references: [id])
+  title         String
+  notes         String?
+  experiencedAt DateTime
+  // Internal sort key -- never rendered to the UI as a number, only as
+  // relative position in a list. M1 just appends (max + 1000); the
+  // binary-search duel flow that actually places new entries is M2.
+  rankPosition  Float
+  metadata      Json?
+  createdById   String
+  createdBy     User     @relation(fields: [createdById], references: [id])
+  createdAt     DateTime @default(now())
+
+  comparisonsWon  Comparison[] @relation("ComparisonWinner")
+  comparisonsLost Comparison[] @relation("ComparisonLoser")
+
+  @@index([subcategoryId, rankPosition])
+}
+
+// Audit trail of each pairwise duel -- schema lands in M1, first written to
+// in M2 once the comparison/duel UI exists.
+model Comparison {
+  id            String   @id @default(cuid())
+  subcategoryId String
+  subcategory   Subcategory @relation(fields: [subcategoryId], references: [id])
+  winnerEntryId String
+  winnerEntry   Entry    @relation("ComparisonWinner", fields: [winnerEntryId], references: [id])
+  loserEntryId  String
+  loserEntry    Entry    @relation("ComparisonLoser", fields: [loserEntryId], references: [id])
+  comparedById  String
+  comparedBy    User     @relation(fields: [comparedById], references: [id])
+  comparedAt    DateTime @default(now())
 }

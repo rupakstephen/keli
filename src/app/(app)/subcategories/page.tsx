@@ -37,6 +37,10 @@ export default async function SubcategoriesPage() {
         </button>
       </form>
 
+      {subcategories.length === 0 && (
+        <p className="text-zinc-500">No subcategories yet -- add one above to get started.</p>
+      )}
+
       {DOMAINS.map((domain) => {
         const inDomain = subcategories.filter((s) => s.domain === domain);
         if (inDomain.length === 0) return null;

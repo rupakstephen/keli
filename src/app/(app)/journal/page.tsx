@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { Domain } from "@/generated/prisma/client";
+import { DomainTabs } from "@/components/DomainTabs";
 
 const DOMAINS: Domain[] = ["MEAL", "MOVIE", "GAME", "TRAVEL"];
 
@@ -22,22 +23,17 @@ export default async function JournalPage({
     <div className="mx-auto max-w-lg space-y-4">
       <h1 className="text-lg font-semibold">Journal</h1>
 
-      <nav className="flex gap-3 text-sm">
-        <Link href="/journal" className={!selectedDomain ? "font-semibold" : "text-zinc-500"}>
-          All
-        </Link>
-        {DOMAINS.map((d) => (
-          <Link
-            key={d}
-            href={`/journal?domain=${d}`}
-            className={selectedDomain === d ? "font-semibold" : "text-zinc-500"}
-          >
-            {d}
-          </Link>
-        ))}
-      </nav>
+      <DomainTabs basePath="/journal" selected={selectedDomain} />
 
-      {entries.length === 0 && <p className="text-zinc-500">No entries yet.</p>}
+      {entries.length === 0 && (
+        <p className="text-zinc-500">
+          No entries yet --{" "}
+          <Link href="/entries/new" className="underline">
+            add your first one
+          </Link>
+          .
+        </p>
+      )}
 
       <ul className="space-y-3">
         {entries.map((entry) => (
@@ -48,7 +44,9 @@ export default async function JournalPage({
               </Link>
               <span>{entry.experiencedAt.toISOString().slice(0, 10)}</span>
             </div>
-            <div className="font-medium">{entry.title}</div>
+            <Link href={`/entries/${entry.id}`} className="font-medium">
+              {entry.title}
+            </Link>
             {entry.notes && <p className="text-sm text-zinc-600">{entry.notes}</p>}
             <p className="text-xs text-zinc-400">Added by {entry.createdBy.name}</p>
           </li>

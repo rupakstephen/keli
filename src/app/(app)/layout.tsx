@@ -4,6 +4,7 @@ import { signOut } from "@/lib/auth";
 const NAV_ITEMS = [
   { href: "/journal", label: "Journal", icon: "📓" },
   { href: "/entries/new", label: "Add", icon: "➕" },
+  { href: "/recipes", label: "Recipes", icon: "🍳" },
   { href: "/subcategories", label: "Lists", icon: "📋" },
 ];
 

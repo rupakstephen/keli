@@ -19,6 +19,7 @@ model User {
 
   entries     Entry[]
   comparisons Comparison[]
+  recipes     Recipe[]
 }
 
 enum Domain {
@@ -53,6 +54,10 @@ model Entry {
   // binary-search duel flow that actually places new entries is M2.
   rankPosition  Float
   metadata      Json?
+  // Optional link to a Recipe, meaningful only for MEAL entries (not
+  // enforced at the DB level -- same tradeoff as Photo's nullable FKs).
+  recipeId      String?
+  recipe        Recipe?  @relation(fields: [recipeId], references: [id])
   createdById   String
   createdBy     User     @relation(fields: [createdById], references: [id])
   createdAt     DateTime @default(now())
@@ -61,6 +66,27 @@ model Entry {
   comparisonsLost Comparison[] @relation("ComparisonLoser")
 
   @@index([subcategoryId, rankPosition])
+}
+
+// The recipe box (M4). Manually authored recipes have sourceUrl == null;
+// imported ones keep rawJsonLd around so normalization logic can be
+// reprocessed later without re-fetching the source page.
+model Recipe {
+  id           String   @id @default(cuid())
+  title        String
+  sourceUrl    String?
+  imageUrl     String?
+  servings     Int?
+  prepTimeMin  Int?
+  cookTimeMin  Int?
+  ingredients  Json // string[]
+  instructions Json // string[]
+  rawJsonLd    Json?
+  createdById  String
+  createdBy    User     @relation(fields: [createdById], references: [id])
+  createdAt    DateTime @default(now())
+
+  entries Entry[]
 }
 
 // Audit trail of each pairwise duel -- schema lands in M1, first written to

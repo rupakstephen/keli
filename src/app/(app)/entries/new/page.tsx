@@ -6,14 +6,20 @@ import { EntryForm } from "./EntryForm";
 export const dynamic = "force-dynamic";
 
 export default async function NewEntryPage() {
-  const subcategories = await prisma.subcategory.findMany({
-    orderBy: [{ domain: "asc" }, { label: "asc" }],
-  });
+  const [subcategories, recipes] = await Promise.all([
+    prisma.subcategory.findMany({
+      orderBy: [{ domain: "asc" }, { label: "asc" }],
+    }),
+    prisma.recipe.findMany({
+      orderBy: { title: "asc" },
+      select: { id: true, title: true },
+    }),
+  ]);
 
   return (
     <div className="mx-auto max-w-lg">
       <h1 className="mb-4 text-lg font-semibold">Add entry</h1>
-      <EntryForm subcategories={subcategories} />
+      <EntryForm subcategories={subcategories} recipes={recipes} />
     </div>
   );
 }

@@ -14,6 +14,7 @@ export async function createEntry(formData: FormData) {
   const title = (formData.get("title") as string)?.trim();
   const notes = (formData.get("notes") as string)?.trim() || null;
   const experiencedAt = formData.get("experiencedAt") as string;
+  const recipeId = (formData.get("recipeId") as string)?.trim() || null;
 
   if (!domain || !subcategoryId || !title || !experiencedAt) return;
 
@@ -33,6 +34,7 @@ export async function createEntry(formData: FormData) {
       notes,
       experiencedAt: new Date(experiencedAt),
       rankPosition: (worst?.rankPosition ?? 0) + 1000,
+      recipeId,
       createdById: session.user.id,
     },
   });

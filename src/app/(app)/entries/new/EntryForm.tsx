@@ -4,10 +4,17 @@ import { useMemo, useState } from "react";
 import { createEntry } from "../actions";
 
 type Subcategory = { id: string; domain: string; label: string };
+type Recipe = { id: string; title: string };
 
 const DOMAINS = ["MEAL", "MOVIE", "GAME", "TRAVEL"] as const;
 
-export function EntryForm({ subcategories }: { subcategories: Subcategory[] }) {
+export function EntryForm({
+  subcategories,
+  recipes,
+}: {
+  subcategories: Subcategory[];
+  recipes: Recipe[];
+}) {
   const [domain, setDomain] = useState<string>(DOMAINS[0]);
 
   const options = useMemo(
@@ -57,6 +64,17 @@ export function EntryForm({ subcategories }: { subcategories: Subcategory[] }) {
       />
 
       <textarea name="notes" placeholder="Notes" className="w-full rounded border px-2 py-1" />
+
+      {domain === "MEAL" && recipes.length > 0 && (
+        <select name="recipeId" defaultValue="" className="w-full rounded border px-2 py-1">
+          <option value="">No recipe linked</option>
+          {recipes.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.title}
+            </option>
+          ))}
+        </select>
+      )}
 
       <button
         type="submit"

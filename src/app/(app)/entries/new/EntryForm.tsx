@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { createEntry } from "../actions";
+import { Field } from "@/components/Field";
 
 type Subcategory = { id: string; domain: string; label: string };
 type Recipe = { id: string; title: string };
@@ -24,56 +25,65 @@ export function EntryForm({
 
   return (
     <form action={createEntry} className="space-y-3">
-      <select
-        name="domain"
-        value={domain}
-        onChange={(e) => setDomain(e.target.value)}
-        className="w-full rounded border px-2 py-1"
-      >
-        {DOMAINS.map((d) => (
-          <option key={d} value={d}>
-            {d}
-          </option>
-        ))}
-      </select>
-
-      <select name="subcategoryId" required className="w-full rounded border px-2 py-1">
-        {options.length === 0 && (
-          <option value="">No subcategories yet -- add one first</option>
-        )}
-        {options.map((s) => (
-          <option key={s.id} value={s.id}>
-            {s.label}
-          </option>
-        ))}
-      </select>
-
-      <input
-        name="title"
-        placeholder="Title"
-        required
-        className="w-full rounded border px-2 py-1"
-      />
-
-      <input
-        name="experiencedAt"
-        type="date"
-        required
-        defaultValue={new Date().toISOString().slice(0, 10)}
-        className="w-full rounded border px-2 py-1"
-      />
-
-      <textarea name="notes" placeholder="Notes" className="w-full rounded border px-2 py-1" />
-
-      {domain === "MEAL" && recipes.length > 0 && (
-        <select name="recipeId" defaultValue="" className="w-full rounded border px-2 py-1">
-          <option value="">No recipe linked</option>
-          {recipes.map((r) => (
-            <option key={r.id} value={r.id}>
-              {r.title}
+      <Field label="Domain" htmlFor="domain">
+        <select
+          id="domain"
+          name="domain"
+          value={domain}
+          onChange={(e) => setDomain(e.target.value)}
+          className="w-full rounded border px-2 py-1"
+        >
+          {DOMAINS.map((d) => (
+            <option key={d} value={d}>
+              {d}
             </option>
           ))}
         </select>
+      </Field>
+
+      <Field label="Subcategory" htmlFor="subcategoryId">
+        <select id="subcategoryId" name="subcategoryId" required className="w-full rounded border px-2 py-1">
+          {options.length === 0 && (
+            <option value="">No subcategories yet -- add one first</option>
+          )}
+          {options.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      <Field label="Title" htmlFor="title">
+        <input id="title" name="title" required className="w-full rounded border px-2 py-1" />
+      </Field>
+
+      <Field label="Date" htmlFor="experiencedAt">
+        <input
+          id="experiencedAt"
+          name="experiencedAt"
+          type="date"
+          required
+          defaultValue={new Date().toISOString().slice(0, 10)}
+          className="w-full rounded border px-2 py-1"
+        />
+      </Field>
+
+      <Field label="Notes" htmlFor="notes">
+        <textarea id="notes" name="notes" className="w-full rounded border px-2 py-1" />
+      </Field>
+
+      {domain === "MEAL" && recipes.length > 0 && (
+        <Field label="Recipe" htmlFor="recipeId" hint="optional">
+          <select id="recipeId" name="recipeId" defaultValue="" className="w-full rounded border px-2 py-1">
+            <option value="">No recipe linked</option>
+            {recipes.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.title}
+              </option>
+            ))}
+          </select>
+        </Field>
       )}
 
       <button

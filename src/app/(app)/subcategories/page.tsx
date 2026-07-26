@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { Domain } from "@/generated/prisma/client";
 import { createSubcategory } from "./actions";
+import { Field } from "@/components/Field";
 
 // Otherwise Next prerenders this at build time and bakes in whatever
 // subcategories existed then -- newly added ones wouldn't show until redeploy.
@@ -18,20 +19,24 @@ export default async function SubcategoriesPage() {
     <div className="mx-auto max-w-lg space-y-6">
       <h1 className="text-lg font-semibold">Subcategories</h1>
 
-      <form action={createSubcategory} className="flex gap-2">
-        <select name="domain" required className="rounded border px-2 py-1">
-          {DOMAINS.map((domain) => (
-            <option key={domain} value={domain}>
-              {domain}
-            </option>
-          ))}
-        </select>
-        <input
-          name="label"
-          placeholder="e.g. Horror, Indian, Beach"
-          required
-          className="flex-1 rounded border px-2 py-1"
-        />
+      <form action={createSubcategory} className="flex items-end gap-2">
+        <Field label="Domain" htmlFor="domain">
+          <select id="domain" name="domain" required className="rounded border px-2 py-1">
+            {DOMAINS.map((domain) => (
+              <option key={domain} value={domain}>
+                {domain}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Name" htmlFor="label" hint="e.g. Horror, Indian, Beach" className="flex-1">
+          <input
+            id="label"
+            name="label"
+            required
+            className="w-full rounded border px-2 py-1"
+          />
+        </Field>
         <button type="submit" className="rounded bg-black px-3 py-1 text-white">
           Add
         </button>

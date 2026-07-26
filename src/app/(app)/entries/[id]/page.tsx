@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { updateEntry } from "./actions";
+import { Field } from "@/components/Field";
 
 export const dynamic = "force-dynamic";
 
@@ -42,38 +43,49 @@ export default async function EntryDetailPage({
 
       <form action={updateEntry} className="space-y-3">
         <input type="hidden" name="id" value={entry.id} />
-        <input
-          name="title"
-          defaultValue={entry.title}
-          required
-          className="w-full rounded border px-2 py-1 font-medium"
-        />
-        <input
-          name="experiencedAt"
-          type="date"
-          defaultValue={entry.experiencedAt.toISOString().slice(0, 10)}
-          required
-          className="w-full rounded border px-2 py-1"
-        />
-        <textarea
-          name="notes"
-          defaultValue={entry.notes ?? ""}
-          placeholder="Notes"
-          className="w-full rounded border px-2 py-1"
-        />
-        {entry.domain === "MEAL" && recipes.length > 0 && (
-          <select
-            name="recipeId"
-            defaultValue={entry.recipeId ?? ""}
+        <Field label="Title" htmlFor="title">
+          <input
+            id="title"
+            name="title"
+            defaultValue={entry.title}
+            required
+            className="w-full rounded border px-2 py-1 font-medium"
+          />
+        </Field>
+        <Field label="Date" htmlFor="experiencedAt">
+          <input
+            id="experiencedAt"
+            name="experiencedAt"
+            type="date"
+            defaultValue={entry.experiencedAt.toISOString().slice(0, 10)}
+            required
             className="w-full rounded border px-2 py-1"
-          >
-            <option value="">No recipe linked</option>
-            {recipes.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.title}
-              </option>
-            ))}
-          </select>
+          />
+        </Field>
+        <Field label="Notes" htmlFor="notes">
+          <textarea
+            id="notes"
+            name="notes"
+            defaultValue={entry.notes ?? ""}
+            className="w-full rounded border px-2 py-1"
+          />
+        </Field>
+        {entry.domain === "MEAL" && recipes.length > 0 && (
+          <Field label="Recipe" htmlFor="recipeId" hint="optional">
+            <select
+              id="recipeId"
+              name="recipeId"
+              defaultValue={entry.recipeId ?? ""}
+              className="w-full rounded border px-2 py-1"
+            >
+              <option value="">No recipe linked</option>
+              {recipes.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.title}
+                </option>
+              ))}
+            </select>
+          </Field>
         )}
         {entry.recipe && (
           <p className="text-sm">

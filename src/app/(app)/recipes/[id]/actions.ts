@@ -1,16 +1,16 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { linesToArray } from "@/lib/linesToArray";
 
-export async function createRecipe(formData: FormData) {
-  const session = await auth();
-  if (!session?.user?.id) throw new Error("Not authenticated");
-
+// rawJsonLd is deliberately left untouched here -- it's the original
+// scraped block, kept for reprocessing if normalization logic changes
+// later, not something a manual edit should overwrite.
+export async function updateRecipe(formData: FormData) {
+  const id = formData.get("id") as string;
   const title = (formData.get("title") as string)?.trim();
-  if (!title) return;
+  if (!id || !title) return;
 
   const sourceUrl = (formData.get("sourceUrl") as string)?.trim() || null;
   const imageUrl = (formData.get("imageUrl") as string)?.trim() || null;
@@ -19,9 +19,9 @@ export async function createRecipe(formData: FormData) {
   const cookTimeMin = Number(formData.get("cookTimeMin")) || null;
   const ingredients = linesToArray(formData.get("ingredients") as string | null);
   const instructions = linesToArray(formData.get("instructions") as string | null);
-  const rawJsonLdRaw = formData.get("rawJsonLd") as string | null;
 
-  const recipe = await prisma.recipe.create({
+  await prisma.recipe.update({
+    where: { id },
     data: {
       title,
       sourceUrl,
@@ -31,10 +31,8 @@ export async function createRecipe(formData: FormData) {
       cookTimeMin,
       ingredients,
       instructions,
-      rawJsonLd: rawJsonLdRaw ? JSON.parse(rawJsonLdRaw) : undefined,
-      createdById: session.user.id,
     },
   });
 
-  redirect(`/recipes/${recipe.id}`);
+  redirect(`/recipes/${id}`);
 }

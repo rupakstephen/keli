@@ -5,6 +5,7 @@ const NAV_ITEMS = [
   { href: "/journal", label: "Journal", icon: "📓" },
   { href: "/entries/new", label: "Add", icon: "➕" },
   { href: "/recipes", label: "Recipes", icon: "🍳" },
+  { href: "/accomplishments", label: "Wins", icon: "🏆" },
   { href: "/subcategories", label: "Lists", icon: "📋" },
 ];
 

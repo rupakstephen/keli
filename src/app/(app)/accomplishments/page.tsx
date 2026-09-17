@@ -1,12 +1,27 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { formatStats } from "@/lib/statsStrip";
 
 // Same reasoning as subcategories/page.tsx: must be fresh on every request.
 export const dynamic = "force-dynamic";
 
 export default async function AccomplishmentsPage() {
-  const accomplishments = await prisma.accomplishment.findMany({
-    orderBy: { achievedAt: "desc" },
+  const [accomplishments, entryCountsByDomain, totalComparisons, cookedFromRecipes] =
+    await Promise.all([
+      prisma.accomplishment.findMany({ orderBy: { achievedAt: "desc" } }),
+      prisma.entry.groupBy({ by: ["domain"], _count: { _all: true } }),
+      prisma.comparison.count(),
+      prisma.entry.groupBy({ by: ["recipeId"], where: { recipeId: { not: null } } }),
+    ]);
+
+  const stats = formatStats({
+    entryCountsByDomain: entryCountsByDomain.map((d) => ({
+      domain: d.domain,
+      count: d._count._all,
+    })),
+    totalComparisons,
+    recipesCookedFrom: cookedFromRecipes.length,
+    totalAccomplishments: accomplishments.length,
   });
 
   return (
@@ -17,6 +32,15 @@ export default async function AccomplishmentsPage() {
           Add
         </Link>
       </div>
+
+      <dl className="flex flex-wrap gap-4 rounded border p-3 text-sm">
+        {stats.map((s) => (
+          <div key={s.label}>
+            <dt className="text-zinc-500">{s.label}</dt>
+            <dd className="text-lg font-semibold">{s.value}</dd>
+          </div>
+        ))}
+      </dl>
 
       {accomplishments.length === 0 && (
         <p className="text-zinc-500">No accomplishments logged yet.</p>

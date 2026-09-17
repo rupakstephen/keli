@@ -17,10 +17,11 @@ model User {
   passwordHash String
   createdAt    DateTime @default(now())
 
-  entries     Entry[]
-  comparisons Comparison[]
-  recipes     Recipe[]
-  photos      Photo[]
+  entries         Entry[]
+  comparisons     Comparison[]
+  recipes         Recipe[]
+  photos          Photo[]
+  accomplishments Accomplishment[]
 }
 
 enum Domain {
@@ -106,19 +107,33 @@ model Comparison {
   comparedAt    DateTime    @default(now())
 }
 
+// The freeform, cross-domain milestone list -- deliberately has no
+// domain/subcategoryId, it's one shared list, not filed per-category.
+model Accomplishment {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  achievedAt  DateTime
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  photos Photo[]
+}
+
 // Generic photo attachment (M5) -- any Entry or Accomplishment can have
 // photos, built once as a shared feature rather than duplicated per parent.
 // Exactly one of entryId/accomplishmentId is set per row, enforced in
 // application code (src/lib/photoTarget.ts), not a DB constraint -- fine at
-// this scale. accomplishmentId has no FK yet: the Accomplishment model
-// lands later in M5.
+// this scale.
 model Photo {
-  id               String   @id @default(cuid())
+  id               String          @id @default(cuid())
   url              String
   entryId          String?
-  entry            Entry?   @relation(fields: [entryId], references: [id])
+  entry            Entry?          @relation(fields: [entryId], references: [id])
   accomplishmentId String?
+  accomplishment   Accomplishment? @relation(fields: [accomplishmentId], references: [id])
   uploadedById     String
-  uploadedBy       User     @relation(fields: [uploadedById], references: [id])
-  createdAt        DateTime @default(now())
+  uploadedBy       User            @relation(fields: [uploadedById], references: [id])
+  createdAt        DateTime        @default(now())
 }

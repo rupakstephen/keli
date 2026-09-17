@@ -20,6 +20,7 @@ model User {
   entries     Entry[]
   comparisons Comparison[]
   recipes     Recipe[]
+  photos      Photo[]
 }
 
 enum Domain {
@@ -42,7 +43,7 @@ model Subcategory {
 }
 
 model Entry {
-  id            String   @id @default(cuid())
+  id            String      @id @default(cuid())
   domain        Domain
   subcategoryId String
   subcategory   Subcategory @relation(fields: [subcategoryId], references: [id])
@@ -57,13 +58,14 @@ model Entry {
   // Optional link to a Recipe, meaningful only for MEAL entries (not
   // enforced at the DB level -- same tradeoff as Photo's nullable FKs).
   recipeId      String?
-  recipe        Recipe?  @relation(fields: [recipeId], references: [id])
+  recipe        Recipe?     @relation(fields: [recipeId], references: [id])
   createdById   String
-  createdBy     User     @relation(fields: [createdById], references: [id])
-  createdAt     DateTime @default(now())
+  createdBy     User        @relation(fields: [createdById], references: [id])
+  createdAt     DateTime    @default(now())
 
   comparisonsWon  Comparison[] @relation("ComparisonWinner")
   comparisonsLost Comparison[] @relation("ComparisonLoser")
+  photos          Photo[]
 
   @@index([subcategoryId, rankPosition])
 }
@@ -92,14 +94,31 @@ model Recipe {
 // Audit trail of each pairwise duel -- schema lands in M1, first written to
 // in M2 once the comparison/duel UI exists.
 model Comparison {
-  id            String   @id @default(cuid())
+  id            String      @id @default(cuid())
   subcategoryId String
   subcategory   Subcategory @relation(fields: [subcategoryId], references: [id])
   winnerEntryId String
-  winnerEntry   Entry    @relation("ComparisonWinner", fields: [winnerEntryId], references: [id])
+  winnerEntry   Entry       @relation("ComparisonWinner", fields: [winnerEntryId], references: [id])
   loserEntryId  String
-  loserEntry    Entry    @relation("ComparisonLoser", fields: [loserEntryId], references: [id])
+  loserEntry    Entry       @relation("ComparisonLoser", fields: [loserEntryId], references: [id])
   comparedById  String
-  comparedBy    User     @relation(fields: [comparedById], references: [id])
-  comparedAt    DateTime @default(now())
+  comparedBy    User        @relation(fields: [comparedById], references: [id])
+  comparedAt    DateTime    @default(now())
+}
+
+// Generic photo attachment (M5) -- any Entry or Accomplishment can have
+// photos, built once as a shared feature rather than duplicated per parent.
+// Exactly one of entryId/accomplishmentId is set per row, enforced in
+// application code (src/lib/photoTarget.ts), not a DB constraint -- fine at
+// this scale. accomplishmentId has no FK yet: the Accomplishment model
+// lands later in M5.
+model Photo {
+  id               String   @id @default(cuid())
+  url              String
+  entryId          String?
+  entry            Entry?   @relation(fields: [entryId], references: [id])
+  accomplishmentId String?
+  uploadedById     String
+  uploadedBy       User     @relation(fields: [uploadedById], references: [id])
+  createdAt        DateTime @default(now())
 }

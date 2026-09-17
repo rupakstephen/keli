@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { updateEntry } from "./actions";
 import { Field } from "@/components/Field";
+import { PhotoUploader } from "@/components/PhotoUploader";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,12 @@ export default async function EntryDetailPage({
     entry.domain === "MEAL"
       ? await prisma.recipe.findMany({ orderBy: { title: "asc" }, select: { id: true, title: true } })
       : [];
+
+  const photos = await prisma.photo.findMany({
+    where: { entryId: entry.id },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, url: true },
+  });
 
   return (
     <div className="mx-auto max-w-lg space-y-4">
@@ -100,6 +107,15 @@ export default async function EntryDetailPage({
           Save
         </button>
       </form>
+
+      <div>
+        <h2 className="mb-2 text-sm font-medium text-zinc-700">Photos</h2>
+        <PhotoUploader
+          entryId={entry.id}
+          photos={photos}
+          revalidate={`/entries/${entry.id}`}
+        />
+      </div>
     </div>
   );
 }

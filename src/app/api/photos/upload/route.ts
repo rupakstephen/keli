@@ -1,13 +1,18 @@
 import { NextResponse } from "next/server";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/db";
 import { validatePhotoTarget } from "@/lib/photoTarget";
 
 // Client-upload pattern: the browser gets a short-lived signed token from
 // this route, then uploads bytes directly to Blob storage -- image bytes
 // never pass through this server function's body (avoids Vercel's function
 // payload-size limits).
+//
+// No onUploadCompleted here: that callback is invoked by Vercel's Blob
+// service hitting this route's deployed URL, which `next dev` on localhost
+// can't receive. The Photo row is instead created by attachPhoto() (see
+// src/lib/photoActions.ts), called directly by the client once upload()
+// resolves -- works identically in dev and production.
 export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -31,16 +36,7 @@ export async function POST(request: Request) {
         }
         return {
           allowedContentTypes: ["image/jpeg", "image/png", "image/webp", "image/heic"],
-          tokenPayload: JSON.stringify({ ...target, uploadedById: session.user.id }),
         };
-      },
-      onUploadCompleted: async ({ blob, tokenPayload }) => {
-        const { entryId, accomplishmentId, uploadedById } = JSON.parse(
-          tokenPayload ?? "{}"
-        ) as { entryId: string | null; accomplishmentId: string | null; uploadedById: string };
-        await prisma.photo.create({
-          data: { url: blob.url, entryId, accomplishmentId, uploadedById },
-        });
       },
     });
     return NextResponse.json(result);

@@ -35,7 +35,10 @@ mkdir -p "$DB_DIR" "$PHOTOS_DIR"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 DUMP_PATH="$DB_DIR/keli-$TIMESTAMP.sql.gz"
 
-pg_dump "$BACKUP_DATABASE_URL" | gzip > "$DUMP_PATH"
+# Write to a temp name and rename on success, so a failed dump never leaves a
+# truncated keli-*.sql.gz that looks like a good backup.
+pg_dump "$BACKUP_DATABASE_URL" | gzip > "$DUMP_PATH.partial"
+mv "$DUMP_PATH.partial" "$DUMP_PATH"
 echo "Database dump: $DUMP_PATH"
 
 npx tsx scripts/backupBlobs.ts "$PHOTOS_DIR"

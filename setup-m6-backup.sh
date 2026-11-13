@@ -132,7 +132,9 @@ write_env() {
   touch "$ENV_FILE"
   tmp=$(mktemp)
   grep -vE "^${key}=" "$ENV_FILE" > "$tmp" || true
-  printf '%s=%s\n' "$key" "$value" >> "$tmp"
+  # %q shell-escapes the value: connection strings contain & and ?, which
+  # would otherwise split the line when .env.backup is sourced.
+  printf '%s=%q\n' "$key" "$value" >> "$tmp"
   mv "$tmp" "$ENV_FILE"
   WRITTEN_ENV+=("$key")
   printf '  %s✓ wrote%s %s → %s\n' "$GREEN" "$RESET" "$key" "$ENV_FILE"

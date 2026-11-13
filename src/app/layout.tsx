@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -15,7 +15,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "keli",
   description: "A private, shared ranking journal.",
+  icons: { apple: "/pwa-icon/180" },
+  appleWebApp: { capable: true, title: "keli", statusBarStyle: "default" },
 };
+
+export const viewport: Viewport = { themeColor: "#18181b" };
 
 export default function RootLayout({
   children,

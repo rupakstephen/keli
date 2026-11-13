@@ -1,36 +1,54 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# keli
 
-## Getting Started
+A private, shared ranking journal for two people. Log home-cooked meals, movies, games and trips, and rank them against each other by head-to-head comparison. No scores are ever shown, only best-to-worst position within a list, and lists never mix (horror is never ranked against comedy). There is no signup, no social feed and no discovery: two seeded accounts share one dataset.
 
-First, run the development server:
+Also in the app: a recipe box (paste a URL to import, or write your own), photos on any entry, and a freeform accomplishments list with live-computed stats.
+
+## Stack
+
+Next.js (App Router, TypeScript, Tailwind) · Prisma + Neon Postgres · Auth.js credentials login · Vercel Blob for photos · deployed on Vercel. Installable on a phone as a PWA.
+
+> This is Next.js 16 with breaking changes from older versions (for example `proxy.ts` replaces `middleware.ts`). Read the matching guide in `node_modules/next/dist/docs/` before changing framework-level code.
+
+## Run locally
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install --ignore-scripts   # skips the prisma postinstall, which needs DATABASE_URL
+cp .env.example .env.local     # fill in the values below
+npx prisma generate
+npx prisma migrate deploy      # apply migrations to your Neon database
+npm run db:seed                # create the 2 accounts (once)
+npm run dev                    # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+| Variable | Used for |
+| --- | --- |
+| `DATABASE_URL` | Neon connection string |
+| `AUTH_SECRET` | Session signing (`npx auth secret`) |
+| `BLOB_READ_WRITE_TOKEN` | Photo uploads. Appears after you create and connect a Blob store in the Vercel project (Storage tab) |
+| `SEED_USER_{1,2}_{EMAIL,NAME,PASSWORD}` | Read once by `npm run db:seed` |
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Other commands: `npm test` (accomplishment input, photo targets, stats strip and backup logic; ranking and the recipe parser have no tests yet), `npm run lint`, `npm run build`.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Project layout
 
-## Learn More
+```
+prisma/            schema, migrations, seed
+src/app/(app)/     authenticated pages: journal, rank, entries, compare, recipes, accomplishments
+src/app/api/       auth, photo upload tokens, recipe import
+src/app/manifest.ts, src/app/pwa-icon/   PWA manifest and generated icons
+src/lib/           ranking.ts (binary-insertion ranking), recipeParser.ts, auth, db
+src/proxy.ts       auth gate; everything except /login, auth routes and PWA assets needs a session
+scripts/           nightly backup (see below)
+docs/              architecture, implementation plan, discovery notes
+```
 
-To learn more about Next.js, take a look at the following resources:
+`docs/implementation-plan.md` has the design decisions and the full milestone history (M0 to M6).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Backups
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+A nightly cron job in the Nextcloud LXC (101 on `pve`) runs `scripts/backup.sh`: a `pg_dump` of Neon plus a sync of new Vercel Blob photos into Nextcloud's data directory, with an optional rsync of the result to a second machine. `setup-m6-backup.sh` is an interactive wizard that provisions it. The dump needs a `pg_dump` at least as new as Neon's Postgres major version.
 
-## Deploy on Vercel
+## Deploy
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Hosted on Vercel (`vercel` for a preview, `vercel --prod` for production). The project needs `DATABASE_URL`, `AUTH_SECRET` and `BLOB_READ_WRITE_TOKEN` set for all environments.
